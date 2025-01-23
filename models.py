@@ -2,7 +2,14 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
 from sqlalchemy_serializer import SerializerMixin
 from sqlalchemy.orm import validates
+from sqlalchemy.ext.hybrid import hybrid_property
+from flask_bcrypt import Bcrypt
+
+
 # Consistent metadata usage
+
+
+bcrypt = Bcrypt()
 metadata = MetaData(naming_convention={'fk': 'fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s'})
 db = SQLAlchemy(metadata=metadata)
 
@@ -19,6 +26,7 @@ class User(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     user_name = db.Column(db.String,nullable=True, unique=True)
+    _password_hash = db.Column(db.String, nullable=False)
     product = db.relationship('Product', back_populates='user')
     lift = db.relationship('Lift', secondary=user_lifts, back_populates='users')
 
@@ -26,10 +34,28 @@ class User(db.Model, SerializerMixin):
     def validate_name(self,key,value):
         if len(value) < 3:
             ValueError('name must be 3 characters and above')
+        return value
+
     @validates('user_name')
     def validate_username(self,key,value):
         if '_' not in value:
             ValueError("username must include a _")
+        return value
+
+
+    @hybrid_property
+    def password_hash(self):
+        return self._password_hash
+
+    @password_hash.setter
+    def password_hash(self, password):
+        password_hash = bcrypt.generate_password_hash(password.encode('utf-8'))
+        self._password_hash = password_hash.decode("utf-8")
+
+    def authenticate(self,password):
+        return bcrypt.check_password_hash(self._password_hash,password.encode('utf-8'))
+
+
 
 class Product(db.Model, SerializerMixin):
     __tablename__ = 'products'
